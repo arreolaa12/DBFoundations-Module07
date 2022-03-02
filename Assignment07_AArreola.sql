@@ -10,6 +10,8 @@
 -- 2022-02-27,AArreola,Added Code and Steps to Each Question
 -- 2022-02-27,AArreola,Ran All Codes
 -- 2022-02-27,AArreola,Completed File
+-- 2022-03-01,AArreola,Updated Code in Questions
+-- 2022-03-01,AArreola,Completed File
 --**************************************************************************--
 Begin Try
 	Use Master;
@@ -252,13 +254,13 @@ go
 
 Select 
   ProductName
-  ,Format(InventoryDate, 'MMMM, yyyy') as InventoryDate
+  ,InventoryDate = DateName(MM, InventoryDate) + ', ' + DateName(YY, InventoryDate)
   ,[Count]
 From
   vProducts Left Join vInventories
     on vProducts.ProductID = vInventories.ProductID
 Order By ProductName
-		   ,InventoryDate;
+		   ,Month(InventoryDate);
 go
 
 -- Question 4 (10% of pts): 
@@ -281,8 +283,8 @@ Create View vProductInventories
  As
    Select Top 10000
     ProductName
-    ,Format(InventoryDate, 'MMMM, yyyy') as InventoryDate
-	,[Count]
+    ,InventoryDate = DateName(MM, InventoryDate) + ', ' + DateName(YY, InventoryDate)
+	,[Count] as 'InventoryCount'
    From vProducts Left Join vInventories
           on vProducts.ProductID = vInventories.ProductID
    Order By ProductName
@@ -311,15 +313,16 @@ go
 
 Create View vCategoryInventories
  As
-   Select 
-    CategoryName 
-    ,Format(InventoryDate, 'MMMM, yyyy') as InventoryDate
-	,Sum([count]) as InventoryCountByCategory
-   From vCategories Left Join vProducts
-          on vCategories.CategoryID = vProducts.CategoryID
-	 Left Join vInventories
-		  on vProducts.ProductID = vInventories.ProductID
-   Group By InventoryDate, CategoryName;
+   Select Top 10000
+    C.CategoryName 
+    ,InventoryDate = DateName(MM, I.InventoryDate) + ', ' + DateName(YY, I.InventoryDate)
+	,Sum(I.[Count]) as InventoryCountByCategory
+   From vCategories as C Left Join vProducts as P
+          on C.CategoryID = P.CategoryID
+	 Left Join vInventories as I
+		  on P.ProductID = I.ProductID
+   Group By C.CategoryName, I.InventoryDate
+   Order By C.CategoryName, Month(I.InventoryDate), InventoryCountByCategory;
 go
 
 -- Check that it works: Select * From vCategoryInventories;
@@ -348,15 +351,14 @@ go
 
 Create View vProductInventoriesWithPreviouMonthCounts
  As
-   Select 
+   Select Top 10000
     ProductName 
-    ,Format(InventoryDate, 'MMMM, yyyy') as InventoryDate
-	,[InventoryCount] = sum([count])
+    ,InventoryDate
+	,InventoryCount
 	,[PreviousMonthCount] = 
-			IIF(Month(InventoryDate) = 1, 0, lag(sum([count])) over(Order By ProductName, month(InventoryDate)))
-   From vProducts Left Join vInventories
-          on vProducts.ProductID = vInventories.ProductID
-   Group By ProductName, InventoryDate;
+			IIF(InventoryDate Like ('January%'), 0, IsNull(Lag(InventoryCount) Over (Order By ProductName, Year(InventoryDate)), 0) )
+   From vProductInventories
+   Order By ProductName, Month(InventoryDate);
 
 go
 
@@ -382,17 +384,18 @@ go
 
 Create View vProductInventoriesWithPreviousMonthCountsWithKPIs
  As
-   Select 
+   Select Top 10000
     ProductName 
     ,InventoryDate
 	,InventoryCount
 	,PreviousMonthCount 
-	,[CountVsPreviousCountKPI] = Case
+	,[CountVsPreviousCountKPI] = IsNull(Case
 		When InventoryCount > PreviousMonthCount Then 1
 		When InventoryCount = PreviousMonthCount Then 0
 		When InventoryCount < PreviousMonthCount Then -1
-		End
+		End,0)
    From vProductInventoriesWithPreviouMonthCounts
+   Order By ProductName, Month(InventoryDate);
   go
 
 
